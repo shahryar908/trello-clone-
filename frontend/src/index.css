@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@theme {
+  /* stationery palette */
+  --color-paper: #f2f5f4;
+  --color-tray: #e7ecea;
+  --color-line: #d4dcd9;
+  --color-linesoft: #e2e8e5;
+  --color-ink: #1c2422;
+  --color-inksoft: #5c6b66;
+  --color-teal: #0e6157;
+  --color-tealdeep: #0a4a43;
+  --color-tealwash: #e3edeb;
+  --color-amber: #a8690f;
+  --color-danger: #c03530;
+
+  --font-display: "Bricolage Grotesque", "Public Sans", sans-serif;
+  --font-body: "Public Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --shadow-card: 0 1px 2px rgb(28 36 34 / 0.06), 0 2px 6px rgb(28 36 34 / 0.04);
+  --shadow-lift: 0 2px 4px rgb(28 36 34 / 0.08), 0 8px 18px rgb(28 36 34 / 0.08);
+  --shadow-stack: 0 2px 0 -1px #fff, 0 3px 0 -1px var(--color-line),
+    0 5px 0 -2px #fff, 0 6px 0 -2px var(--color-line),
+    0 1px 2px rgb(28 36 34 / 0.06), 0 2px 6px rgb(28 36 34 / 0.04);
+  --shadow-modal: 0 12px 40px rgb(28 36 34 / 0.18);
+
+  --animate-pop: pop 160ms ease-out;
+
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+/* faint desk dot-grid, used on auth + board pages */
+@utility bg-dotgrid {
+  background-image: radial-gradient(var(--color-linesoft) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+@layer base {
+  body {
+    @apply min-h-screen bg-paper font-body text-sm text-ink antialiased;
+  }
+
+  input,
+  select,
+  textarea {
+    @apply rounded-md border border-line bg-white px-3 py-2 text-sm text-ink transition-colors placeholder:text-inksoft focus:border-teal focus:outline-none focus:ring-[3px] focus:ring-tealwash;
+  }
+
+  button {
+    @apply cursor-pointer;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-teal;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}
