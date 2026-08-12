@@ -1,10 +1,14 @@
 # Cluster definition for local development.
 #
+# NOTE: this lives OUTSIDE infraops/k8s/ on purpose. That folder is what ArgoCD
+# syncs into the cluster, and this is a kind config — not a Kubernetes resource.
+# ArgoCD would fail trying to apply it.
+#
 # A kind cluster is a Docker container pretending to be a node, so nothing
 # inside it is reachable from Windows by default. extraPortMappings punches
-# ports 80/443 through, which is what lets the Ingress answer on tack.local.
+# ports 80/443 through, which is what lets the Ingress answer.
 #
-#   kind create cluster --name tack --config infraops/k8s/kind-cluster.yml
+#   kind create cluster --name tack --config infraops/kind/kind-cluster.yml
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: tack

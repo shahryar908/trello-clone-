@@ -1,0 +1,26 @@
+# The GitOps contract: this object says "the tack namespace must look exactly
+# like infraops/k8s/ in this repo, forever."
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tack
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    # >>> CHANGE THIS to your repo URL <<<
+    repoURL: https://github.com/shahryar908/trello-clone-.git
+    targetRevision: main
+    path: infraops/k8s # only this folder is synced
+
+  destination:
+    server: https://kubernetes.default.svc # this cluster
+    namespace: tack
+
+  syncPolicy:
+    automated:
+      prune: true # delete cluster objects when their file is deleted from git
+      selfHeal: true # revert anything changed by hand — git is the only truth
+    syncOptions:
+      - CreateNamespace=true

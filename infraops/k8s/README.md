@@ -21,7 +21,7 @@ the Namespace has to exist before anything that lives in it.
 kind create cluster --name tack --config infraops/k8s/kind-cluster.yml
 
 # ingress controller (the thing that actually reads Ingress objects)
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.15.1/deploy/static/provider/kind/deploy.yaml
 kubectl wait -n ingress-nginx --for=condition=ready pod \
   -l app.kubernetes.io/component=controller --timeout=180s
 ```

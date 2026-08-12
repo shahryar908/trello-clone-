@@ -27,7 +27,10 @@ echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> ~/.bashrc
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 echo "==> ingress-nginx"
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/ingress-nginx/main/deploy/static/provider/baremetal/deploy.yaml
+# Pinned to a release tag on purpose: the manifests are not published on the
+# `main` branch, and an unpinned URL silently changes what you install.
+INGRESS_VERSION=v1.15.1
+kubectl apply -f "https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-${INGRESS_VERSION}/deploy/static/provider/baremetal/deploy.yaml"
 
 # baremetal provider exposes the controller as NodePort. On a single EC2 box we
 # want it on the real ports 80/443, so switch the Service to hostPort-style
