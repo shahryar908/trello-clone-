@@ -22,7 +22,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: backend
-          image: shahryar371/trello-backend:latest
+          image: shahryar371/trello-backend:65be0452c1d798fe71e3ce27f98af742839fb5f4
           # :latest + IfNotPresent means a node that already cached the image
           # never sees your new push. Always re-checks the registry.
           # The real fix is immutable tags (:<git-sha>) — that comes with CI.
