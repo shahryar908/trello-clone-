@@ -1,5 +1,13 @@
-const BASE_URL = "http://localhost:8000";
-export const WS_BASE = "ws://localhost:8000";
+// Vite inlines these at BUILD time, not run time — a built image cannot be
+// re-pointed with an env var. Dev talks to the backend on another port; a
+// production build always uses "/api", which the Ingress routes to the backend
+// on the same origin (so: no CORS).
+const BASE_URL =
+  import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? "/api" : "http://localhost:8000");
+
+export const WS_BASE = BASE_URL.startsWith("/")
+  ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}${BASE_URL}`
+  : BASE_URL.replace(/^http/, "ws");
 
 export function getToken() {
   return localStorage.getItem("token");

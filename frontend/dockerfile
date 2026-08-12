@@ -1,0 +1,22 @@
+# ---- stage 1: build the static files ----
+FROM oven/bun:1 AS build
+
+WORKDIR /app
+
+# lockfile first for layer caching (same reason as the backend)
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+
+COPY . .
+RUN bun run build   # produces /app/dist — plain html/css/js, no Bun needed after this
+
+# ---- stage 2: serve them ----
+# Everything above (Bun, node_modules, source) is thrown away. The final image
+# is just nginx + the dist folder: ~50MB instead of ~500MB, and no build
+# toolchain in production. "unprivileged" = runs as a non-root user on 8080.
+FROM nginxinc/nginx-unprivileged:alpine
+
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 8080

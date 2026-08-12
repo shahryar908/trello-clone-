@@ -1,0 +1,11 @@
+# Non-secret settings. Anything sensitive belongs in 02-secret.yml instead.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: tack
+data:
+  # four slashes = an absolute path: sqlite:/// + /data/trello.db
+  # /data is the PersistentVolume mounted in 04-backend.yml
+  DATABASE_URL: "sqlite:////data/trello.db"
+  ACCESS_TOKEN_EXPIRE_MINUTES: "10080"

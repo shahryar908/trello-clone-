@@ -1,0 +1,25 @@
+# Cluster definition for local development.
+#
+# A kind cluster is a Docker container pretending to be a node, so nothing
+# inside it is reachable from Windows by default. extraPortMappings punches
+# ports 80/443 through, which is what lets the Ingress answer on tack.local.
+#
+#   kind create cluster --name tack --config infraops/k8s/kind-cluster.yml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: tack
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP

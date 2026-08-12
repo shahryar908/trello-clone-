@@ -1,0 +1,22 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir uv
+
+# Dependencies first, code second. Docker caches each layer and reuses it until
+# the files it copied change — so editing app code no longer re-runs uv sync.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen
+
+COPY app ./app
+
+# Don't run as root: if the app is ever exploited, the attacker lands as a
+# user with no privileges instead of owning the container.
+RUN useradd --create-home --uid 1000 app && chown -R app:app /app
+USER app
+
+EXPOSE 8000
+
+# --no-sync: never try to reinstall at runtime (the image is already built)
+CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

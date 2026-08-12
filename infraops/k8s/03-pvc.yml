@@ -1,0 +1,15 @@
+# A pod's filesystem dies with the pod. The SQLite file must outlive it, so we
+# ask the cluster for a piece of disk that has its own lifecycle.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backend-data
+  namespace: tack
+spec:
+  accessModes:
+    - ReadWriteOnce # one node mounts it read-write — matches SQLite's single-writer rule
+  resources:
+    requests:
+      storage: 1Gi
+  # no storageClassName: use whatever the cluster's default provisioner is
+  # (kind ships "standard"; EKS would be gp2/gp3)

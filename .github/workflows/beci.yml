@@ -1,0 +1,61 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/beci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/beci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # Add lint/test steps here once ruff/pytest are set up
+      # - name: Lint
+      #   run: uv run ruff check .
+      # - name: Test
+      #   run: uv run pytest
+
+      - name: Smoke check (app imports)
+        run: uv run python -c "import app.main"
+
+  docker-build:
+    name: Docker build
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image (no push)
+        run: docker build -t trello-clone-backend:${{ github.sha }} backend
+
+  # Later, for GitOps CD via ArgoCD:
+  # push the image to a registry (add login + docker push with credentials),
+  # then bump the image tag in the infraops manifests that ArgoCD watches.

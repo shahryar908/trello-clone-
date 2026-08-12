@@ -1,0 +1,57 @@
+# A Service is only reachable inside the cluster. An Ingress is the front door:
+# one hostname, one port 80, routed to different Services by URL path.
+#
+# There are TWO Ingress objects here on purpose. Annotations apply to a whole
+# Ingress, and only the /api rule needs the path-rewrite one — putting both
+# rules in a single object would rewrite the frontend's URLs too and break it.
+
+# --- /api/* -> backend, with the /api prefix stripped off ---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tack-api
+  namespace: tack
+  annotations:
+    # the browser asks for /api/orgs; the backend only knows /orgs.
+    # $2 is the second capture group of the path regex below.
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    # WebSockets are long-lived; the default 60s proxy timeout would cut the
+    # board's presence/comments socket every minute.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  rules:
+    # No `host:` on purpose — a rule without one matches ANY hostname, so the
+    # same manifest works for tack.local on kind and for the EC2 public DNS or
+    # raw IP. Add `host:` back once there's a real domain (needed for TLS).
+    - http:
+        paths:
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific # required when the path is a regex
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
+
+---
+# --- everything else -> frontend (no rewrite: paths pass through untouched) ---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tack-web
+  namespace: tack
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

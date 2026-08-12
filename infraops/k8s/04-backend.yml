@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: tack
+spec:
+  replicas: 1 # SQLite is single-writer: two pods on one file corrupts it. Never scale up.
+  strategy:
+    type: Recreate # kill the old pod before starting the new one — they can't share the volume
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend # must match selector.matchLabels above AND the Service selector below
+    spec:
+      securityContext:
+        # the image runs as uid 1000; fsGroup makes k8s chown the mounted
+        # volume to that group, otherwise a non-root process can't write the
+        # SQLite file to /data
+        fsGroup: 1000
+      containers:
+        - name: backend
+          image: shahryar371/trello-backend:latest
+          # :latest + IfNotPresent means a node that already cached the image
+          # never sees your new push. Always re-checks the registry.
+          # The real fix is immutable tags (:<git-sha>) — that comes with CI.
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: backend-config # DATABASE_URL, token lifetime
+            - secretRef:
+                name: backend-secret # SECRET_KEY
+          volumeMounts:
+            - name: data
+              mountPath: /data # where DATABASE_URL points
+          readinessProbe: # "can it serve traffic yet?" — Service adds the pod only when this passes
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe: # "is it still alive?" — k8s restarts the pod when this fails
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests: # what the scheduler reserves
+              cpu: 50m
+              memory: 128Mi
+            limits: # hard ceiling; exceeding memory = OOMKilled
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: backend-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: tack
+spec:
+  selector:
+    app: backend # this label match is the ONLY link between Service and pods
+  ports:
+    - port: 8000
+      targetPort: 8000
