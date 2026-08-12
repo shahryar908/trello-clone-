@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: shahryar371/trello-frontend:latest
+          image: shahryar371/trello-frontend:65be0452c1d798fe71e3ce27f98af742839fb5f4
           imagePullPolicy: Always
           # nginx-unprivileged serves on 8080, not 80 — only root may bind
           # ports below 1024, and this container deliberately isn't root.
