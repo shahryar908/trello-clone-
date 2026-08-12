@@ -9,35 +9,41 @@ router = APIRouter()
 
 
 class ConnectionManager:
-    """In-memory rooms: board_id -> {user_id: websocket}. Doubles as presence data."""
+    """In-memory rooms: board_id -> {user_id: {websockets}}. Doubles as presence data.
+
+    One user may hold several sockets at once — two devices, two tabs, or a stale
+    socket that hasn't finished closing during a reconnect. Keeping a set rather
+    than a single socket per user is what makes those cases work; storing one
+    would make each new connection evict the previous one.
+    """
 
     def __init__(self) -> None:
-        self.rooms: dict[int, dict[int, WebSocket]] = {}
+        self.rooms: dict[int, dict[int, set[WebSocket]]] = {}
 
     async def connect(self, board_id: int, user_id: int, websocket: WebSocket) -> None:
         await websocket.accept()
-        room = self.rooms.setdefault(board_id, {})
-        old = room.get(user_id)
-        room[user_id] = websocket
-        if old is not None:  # a reconnect replaces the previous socket
-            try:
-                await old.close()
-            except Exception:
-                pass
+        self.rooms.setdefault(board_id, {}).setdefault(user_id, set()).add(websocket)
 
     def disconnect(self, board_id: int, user_id: int, websocket: WebSocket) -> None:
         room = self.rooms.get(board_id)
-        if room and room.get(user_id) is websocket:
+        if not room:
+            return
+        sockets = room.get(user_id)
+        if not sockets:
+            return
+        sockets.discard(websocket)
+        if not sockets:  # that user's last device left — drop them from presence
             del room[user_id]
-            if not room:
-                del self.rooms[board_id]
+        if not room:
+            del self.rooms[board_id]
 
     async def broadcast(self, board_id: int, message: dict) -> None:
-        for ws in list(self.rooms.get(board_id, {}).values()):
-            try:
-                await ws.send_json(message)
-            except Exception:
-                pass
+        for sockets in list(self.rooms.get(board_id, {}).values()):
+            for ws in list(sockets):
+                try:
+                    await ws.send_json(message)
+                except Exception:
+                    pass
 
 
 manager = ConnectionManager()
