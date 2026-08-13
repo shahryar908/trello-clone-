@@ -11,6 +11,9 @@ import os
 # the environment, so setting them here beats whatever is in backend/.env.
 os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("SECRET_KEY", "test-secret-not-the-production-one")
+# 0 = don't bind the metrics port. The metrics themselves still record; only the
+# background HTTP server is skipped, so parallel test runs can't fight over 9100.
+os.environ.setdefault("METRICS_PORT", "0")
 
 from dataclasses import dataclass  # noqa: E402
 

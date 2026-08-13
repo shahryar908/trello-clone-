@@ -3,6 +3,7 @@ from sqlmodel import Session, select
 
 from ..auth import create_access_token, hash_password, verify_password
 from ..database import get_session
+from ..metrics import SIGNUPS
 from ..models import User
 from ..schemas import LoginRequest, SignupRequest, TokenResponse, UserRead
 
@@ -18,6 +19,7 @@ def signup(body: SignupRequest, session: Session = Depends(get_session)):
     session.add(user)
     session.commit()
     session.refresh(user)
+    SIGNUPS.inc()
     return user
 
 

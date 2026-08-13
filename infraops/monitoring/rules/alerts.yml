@@ -1,0 +1,145 @@
+# Alerts.
+#
+# `for:` is the part people skip. Without it a single slow scrape pages you at
+# 3am. With it, the condition has to hold continuously for that long before the
+# alert fires — which is the difference between a signal and a nuisance.
+#
+# Severity convention used here:
+#   critical = users are affected right now
+#   warning  = it will affect users if nobody looks
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: tack-alerts
+  namespace: monitoring
+  labels:
+    release: kps
+spec:
+  groups:
+    # -------------------------------------------------------------------
+    - name: tack.availability
+      rules:
+        - alert: TackBackendDown
+          expr: up{namespace="tack", service="backend"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Backend is not responding to scrapes"
+            description: >-
+              Prometheus has not been able to reach the backend metrics port for
+              2 minutes. Check `kubectl -n tack get pods` and the pod's events.
+
+        # up == 0 can only fire for a target Prometheus KNOWS about. If the
+        # ServiceMonitor stops matching — someone renames a label, deletes the
+        # Service — the target disappears and up{} returns nothing at all, so
+        # the alert above goes quiet exactly when things are worst.
+        # absent() is what covers that hole. Every up==0 alert wants a partner.
+        - alert: TackBackendTargetMissing
+          expr: absent(up{namespace="tack", service="backend"})
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Backend has vanished from Prometheus entirely"
+            description: >-
+              No scrape target matches the backend. Usually the ServiceMonitor
+              selector no longer matches the Service's labels.
+
+        - alert: TackDeploymentDegraded
+          expr: |
+            kube_deployment_status_replicas_available{namespace="tack"}
+              < kube_deployment_spec_replicas{namespace="tack"}
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.deployment }} has fewer ready pods than it wants"
+
+        - alert: TackPodRestarting
+          expr: increase(kube_pod_container_status_restarts_total{namespace="tack"}[15m]) > 2
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.pod }} restarted more than twice in 15 minutes"
+            description: >-
+              Usually a failing liveness probe or an OOMKill. Check
+              `kubectl -n tack describe pod {{ $labels.pod }}`.
+
+    # -------------------------------------------------------------------
+    - name: tack.traffic
+      rules:
+        # A ratio, not a count. 50 errors a minute is a disaster for a quiet
+        # service and a rounding error for a busy one — only the ratio means
+        # the same thing at every traffic level.
+        - alert: TackHighErrorRate
+          expr: |
+            sum(rate(tack_http_requests_total{status=~"5.."}[5m]))
+              /
+            sum(rate(tack_http_requests_total[5m]))
+              > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "More than 5% of requests are failing"
+
+        - alert: TackHighLatency
+          expr: |
+            histogram_quantile(
+              0.95,
+              sum by (le) (rate(tack_http_request_duration_seconds_bucket[5m]))
+            ) > 0.5
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "95th percentile latency is above 500ms"
+            description: >-
+              The p95, not the average. An average hides the slow tail that
+              users actually notice.
+
+    # -------------------------------------------------------------------
+    - name: tack.capacity
+      rules:
+        # SQLite lives on this volume. Filling it means writes start failing.
+        - alert: TackDataVolumeFillingUp
+          expr: |
+            kubelet_volume_stats_available_bytes{namespace="tack"}
+              /
+            kubelet_volume_stats_capacity_bytes{namespace="tack"}
+              < 0.15
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "The backend's data volume is over 85% full"
+
+        # t2.medium has 4GiB total and this stack is a big share of it.
+        - alert: NodeMemoryLow
+          expr: |
+            node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.12
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node has less than 12% memory available"
+            description: >-
+              The next thing to happen is an OOMKill, and Prometheus is usually
+              the biggest process on the box.
+
+        - alert: NodeDiskFillingUp
+          expr: |
+            node_filesystem_avail_bytes{mountpoint="/", fstype!="tmpfs"}
+              /
+            node_filesystem_size_bytes{mountpoint="/", fstype!="tmpfs"}
+              < 0.15
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Root filesystem is over 85% full"
+            description: >-
+              On this box it is almost always accumulated container images.
+              `sudo k3s crictl rmi --prune`.

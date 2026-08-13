@@ -28,7 +28,14 @@ spec:
           # The real fix is immutable tags (:<git-sha>) — that comes with CI.
           imagePullPolicy: Always
           ports:
-            - containerPort: 8000
+            - name: http
+              containerPort: 8000
+            # Prometheus scrapes this one. It is deliberately NOT routed by the
+            # Ingress, so /metrics is reachable inside the cluster and nowhere
+            # else — it would otherwise publish every route name and latency
+            # figure to the internet.
+            - name: metrics
+              containerPort: 9100
           envFrom:
             - configMapRef:
                 name: backend-config # DATABASE_URL, token lifetime
@@ -37,15 +44,16 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data # where DATABASE_URL points
-          readinessProbe: # "can it serve traffic yet?" — Service adds the pod only when this passes
+          # Two probes, two different questions, two different endpoints.
+          readinessProbe: # "can it serve traffic?" — Service adds the pod only when this passes
             httpGet:
-              path: /health
+              path: /health/ready # touches the database
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10
-          livenessProbe: # "is it still alive?" — k8s restarts the pod when this fails
+          livenessProbe: # "is the process alive?" — k8s RESTARTS the pod when this fails
             httpGet:
-              path: /health
+              path: /health # deliberately checks nothing but the event loop
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 20
@@ -67,9 +75,17 @@ kind: Service
 metadata:
   name: backend
   namespace: tack
+  labels:
+    app: backend # the ServiceMonitor selects the SERVICE by this label
 spec:
   selector:
     app: backend # this label match is the ONLY link between Service and pods
+  # Once a Service has more than one port, every port MUST be named — and the
+  # ServiceMonitor refers to "metrics" by that name, not by the number.
   ports:
-    - port: 8000
+    - name: http
+      port: 8000
       targetPort: 8000
+    - name: metrics
+      port: 9100
+      targetPort: 9100

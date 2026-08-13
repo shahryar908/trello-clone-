@@ -1,0 +1,29 @@
+# Tells Prometheus what to scrape.
+#
+# You never edit Prometheus's config file. You create a ServiceMonitor, the
+# operator notices it, regenerates the config, and reloads Prometheus. That is
+# the whole point of the operator.
+#
+# It selects a SERVICE, not a pod. The Service's Endpoints give Prometheus one
+# scrape target per ready pod, so scaling the Deployment needs no change here.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: tack-backend
+  namespace: monitoring
+spec:
+  # the Service lives in another namespace than this ServiceMonitor
+  namespaceSelector:
+    matchNames:
+      - tack
+  selector:
+    matchLabels:
+      app: backend # matches the LABELS on the Service, not its selector
+  endpoints:
+    # "metrics" is the Service port NAME from 04-backend.yml, not 9100.
+    # Referring to the name means the port number can change without touching
+    # this file — and it is why that Service had to name its ports at all.
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s

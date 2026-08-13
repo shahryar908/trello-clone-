@@ -1,0 +1,156 @@
+# kube-prometheus-stack: Prometheus + Alertmanager + Grafana + the operator,
+# plus node-exporter (machine metrics) and kube-state-metrics (object metrics).
+#
+# ArgoCD can deploy a Helm chart directly — no `helm install` on the box, no
+# state living only in your shell history. The chart version below is the
+# deployed version, and changing it here is the upgrade.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 88.3.0 # pinned: "latest" means your cluster changes when you aren't looking
+    helm:
+      releaseName: kps
+      values: |
+        # ---------------------------------------------------------------
+        # k3s runs the whole control plane inside one process, so these four
+        # have no separate endpoint to scrape. Left enabled, the operator
+        # creates targets that are permanently down and alerts that fire
+        # forever — the fastest way to teach yourself to ignore alerts.
+        # ---------------------------------------------------------------
+        kubeControllerManager:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeProxy:
+          enabled: false
+        kubeEtcd:
+          enabled: false
+
+        defaultRules:
+          rules:
+            etcd: false
+            kubeProxy: false
+            kubeSchedulerAlerting: false
+            kubeSchedulerRecording: false
+            kubeControllerManager: false
+
+        prometheus:
+          prometheusSpec:
+            # 3 days is plenty for a demo box and keeps the disk small.
+            retention: 3d
+            retentionSize: 4GB
+            scrapeInterval: 30s
+
+            # THE gotcha. By default Prometheus only adopts ServiceMonitors
+            # carrying this Helm release's label, so a ServiceMonitor you wrote
+            # by hand is silently ignored and you spend an evening wondering
+            # why your target never appears. false = watch all of them.
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            probeSelectorNilUsesHelmValues: false
+
+            resources:
+              requests:
+                cpu: 100m
+                memory: 400Mi
+              limits:
+                memory: 1Gi
+
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: local-path   # k3s's built-in provisioner
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 5Gi
+
+        alertmanager:
+          alertmanagerSpec:
+            retention: 48h
+            resources:
+              requests:
+                cpu: 10m
+                memory: 64Mi
+              limits:
+                memory: 128Mi
+
+        grafana:
+          # No persistence on purpose. Every dashboard is provisioned from a
+          # ConfigMap in git, so Grafana can be deleted and recreated and
+          # nothing is lost. A dashboard someone drew in the UI is not real.
+          persistence:
+            enabled: false
+
+          # The password is NOT in this file. Create the secret on the box:
+          #   kubectl create secret generic grafana-admin -n monitoring \
+          #     --from-literal=admin-user=admin \
+          #     --from-literal=admin-password='<something long>'
+          # Same lesson as backend-secret: selfHeal would happily revert a real
+          # password to whatever placeholder was committed.
+          admin:
+            existingSecret: grafana-admin
+            userKey: admin-user
+            passwordKey: admin-password
+
+          sidecar:
+            dashboards:
+              enabled: true
+              label: grafana_dashboard    # any ConfigMap with this label is imported
+              searchNamespace: ALL
+
+          resources:
+            requests:
+              cpu: 25m
+              memory: 96Mi
+            limits:
+              memory: 256Mi
+
+        prometheusOperator:
+          resources:
+            requests:
+              cpu: 25m
+              memory: 96Mi
+            limits:
+              memory: 256Mi
+
+        kube-state-metrics:
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+
+        prometheus-node-exporter:
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The Prometheus CRDs are enormous. A client-side apply stuffs the whole
+      # previous object into an annotation, which blows past the 262144-byte
+      # limit and fails with "metadata.annotations: Too long". Server-side
+      # apply has no such limit.
+      - ServerSideApply=true

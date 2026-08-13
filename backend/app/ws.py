@@ -3,6 +3,7 @@ from sqlmodel import Session, select
 
 from .auth import decode_token
 from .database import engine
+from .metrics import COMMENTS_CREATED, WS_CONNECTIONS, WS_ROOMS
 from .models import Board, Comment, Issue, Membership, User
 
 router = APIRouter()
@@ -20,9 +21,22 @@ class ConnectionManager:
     def __init__(self) -> None:
         self.rooms: dict[int, dict[int, set[WebSocket]]] = {}
 
+    def _publish_gauges(self) -> None:
+        """Recompute the gauges from the actual rooms.
+
+        Deriving them instead of incrementing and decrementing means they can
+        never drift — a double disconnect or a missed one cannot push the
+        connection count negative.
+        """
+        WS_ROOMS.set(len(self.rooms))
+        WS_CONNECTIONS.set(
+            sum(len(sockets) for room in self.rooms.values() for sockets in room.values())
+        )
+
     async def connect(self, board_id: int, user_id: int, websocket: WebSocket) -> None:
         await websocket.accept()
         self.rooms.setdefault(board_id, {}).setdefault(user_id, set()).add(websocket)
+        self._publish_gauges()
 
     def disconnect(self, board_id: int, user_id: int, websocket: WebSocket) -> None:
         room = self.rooms.get(board_id)
@@ -36,6 +50,7 @@ class ConnectionManager:
             del room[user_id]
         if not room:
             del self.rooms[board_id]
+        self._publish_gauges()
 
     async def broadcast(self, board_id: int, message: dict) -> None:
         for sockets in list(self.rooms.get(board_id, {}).values()):
@@ -89,6 +104,7 @@ async def handle_message(
                 "author": {"id": author.id, "email": author.email},
             },
         }
+    COMMENTS_CREATED.inc()
     await manager.broadcast(board_id, payload)
 
 

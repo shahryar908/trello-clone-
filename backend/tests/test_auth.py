@@ -9,6 +9,34 @@ def test_health_needs_no_auth(client):
     assert response.json() == {"status": "ok"}
 
 
+def test_readiness_needs_no_auth_and_checks_the_database(client):
+    response = client.get("/health/ready")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+
+
+def test_readiness_reports_503_when_the_database_is_gone(client, monkeypatch):
+    """Readiness must fail when the dependency fails — that is its whole job.
+
+    503 takes the pod out of the Service's endpoints without restarting it, so
+    it rejoins on its own once the database is back.
+    """
+    from app import database
+
+    class BrokenEngine:
+        def connect(self, *args, **kwargs):
+            raise OSError("database is unreachable")
+
+    monkeypatch.setattr(database, "engine", BrokenEngine())
+
+    response = client.get("/health/ready")
+    assert response.status_code == 503
+
+    # and liveness stays green: the process is fine, so restarting it would
+    # only make things worse
+    assert client.get("/health").status_code == 200
+
+
 def test_signup_returns_the_user_without_the_password(client):
     response = client.post(
         "/auth/signup", json={"email": "ada@example.com", "password": "hunter2hunter2"}

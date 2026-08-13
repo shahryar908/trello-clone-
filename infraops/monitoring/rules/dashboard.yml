@@ -1,0 +1,225 @@
+# A Grafana dashboard, as code.
+#
+# The Grafana sidecar watches every namespace for ConfigMaps carrying the
+# `grafana_dashboard` label, and imports whatever JSON it finds. So the
+# dashboard is version-controlled, reviewed in a PR, and restored automatically
+# if Grafana is wiped — which is why the chart above turns persistence off.
+#
+# No datasource is named in the panels. Grafana falls back to the default one,
+# which the stack sets to its own Prometheus.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tack-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  tack.json: |
+    {
+      "uid": "tack-overview",
+      "title": "tack — service overview",
+      "tags": ["tack"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "refresh": "30s",
+      "time": { "from": "now-6h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Requests / sec",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+          "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 2 }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "targets": [
+            { "refId": "A", "expr": "sum(rate(tack_http_requests_total[5m]))" }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Error ratio (5xx)",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "decimals": 2,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 0.01 },
+                  { "color": "red", "value": 0.05 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "background"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(tack_http_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(tack_http_requests_total[5m])), 0.0001)"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "p95 latency",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "decimals": 3,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 0.3 },
+                  { "color": "red", "value": 0.5 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "background"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(tack_http_request_duration_seconds_bucket[5m])))"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Live board sockets",
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "targets": [
+            { "refId": "A", "expr": "sum(tack_websocket_connections)" }
+          ]
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Request rate by status",
+          "description": "Split by status class. A rising 4xx line is usually a broken client; a rising 5xx line is you.",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+          "fieldConfig": {
+            "defaults": { "unit": "reqps", "custom": { "fillOpacity": 20, "stacking": { "mode": "normal" } } },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "legendFormat": "{{status}}",
+              "expr": "sum by (status) (rate(tack_http_requests_total[5m]))"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Latency percentiles",
+          "description": "p50 is the typical user. p99 is the angry one. Watch the gap between them.",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+          "targets": [
+            {
+              "refId": "A",
+              "legendFormat": "p50",
+              "expr": "histogram_quantile(0.50, sum by (le) (rate(tack_http_request_duration_seconds_bucket[5m])))"
+            },
+            {
+              "refId": "B",
+              "legendFormat": "p95",
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(tack_http_request_duration_seconds_bucket[5m])))"
+            },
+            {
+              "refId": "C",
+              "legendFormat": "p99",
+              "expr": "histogram_quantile(0.99, sum by (le) (rate(tack_http_request_duration_seconds_bucket[5m])))"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Slowest routes (p95)",
+          "description": "Same histogram, kept split by route template. This is what the cardinality rule in metrics.py buys you.",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+          "targets": [
+            {
+              "refId": "A",
+              "legendFormat": "{{method}} {{path}}",
+              "expr": "topk(5, histogram_quantile(0.95, sum by (le, method, path) (rate(tack_http_request_duration_seconds_bucket[5m]))))"
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Realtime activity",
+          "description": "Sockets and rooms are gauges (a reading). Comments is a counter, so it is shown as a rate.",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "targets": [
+            { "refId": "A", "legendFormat": "open sockets", "expr": "sum(tack_websocket_connections)" },
+            { "refId": "B", "legendFormat": "active boards", "expr": "sum(tack_websocket_rooms)" },
+            { "refId": "C", "legendFormat": "comments/min", "expr": "sum(rate(tack_comments_created_total[5m])) * 60" },
+            { "refId": "D", "legendFormat": "signups/hour", "expr": "sum(rate(tack_signups_total[15m])) * 3600" }
+          ]
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Pod memory vs limit",
+          "description": "The line to watch before an OOMKill. Limits are set in 04-backend.yml.",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+          "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+          "targets": [
+            {
+              "refId": "A",
+              "legendFormat": "{{pod}}",
+              "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"tack\", container!=\"\"})"
+            },
+            {
+              "refId": "B",
+              "legendFormat": "{{container}} limit",
+              "expr": "sum by (container) (kube_pod_container_resource_limits{namespace=\"tack\", resource=\"memory\"})"
+            }
+          ]
+        },
+        {
+          "id": 10,
+          "type": "timeseries",
+          "title": "Restarts & deploy activity",
+          "description": "A step here right after a git push is a normal rollout. A staircase is a crash loop.",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "targets": [
+            {
+              "refId": "A",
+              "legendFormat": "{{pod}} restarts (1h)",
+              "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"tack\"}[1h]))"
+            },
+            {
+              "refId": "B",
+              "legendFormat": "{{deployment}} ready",
+              "expr": "kube_deployment_status_replicas_available{namespace=\"tack\"}"
+            }
+          ]
+        }
+      ]
+    }

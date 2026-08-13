@@ -1,0 +1,44 @@
+# The tack-specific monitoring: what to scrape, what to alert on, what to draw.
+#
+# Deliberately a SEPARATE Application from both the stack and the app:
+#
+#   - separate from `tack`, because these objects need the ServiceMonitor and
+#     PrometheusRule CRDs to exist. If they lived in infraops/k8s/, then on a
+#     cluster without monitoring installed the whole app Application would go
+#     Degraded and your deploys would stop. Monitoring must never be able to
+#     break the thing it monitors.
+#
+#   - separate from `monitoring`, because the chart is upstream and this is
+#     yours. Different change cadence, different reasons to roll back.
+#
+# On a fresh cluster this Application fails its first sync (the CRDs are still
+# being installed by the stack above) and succeeds on retry. That is expected.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tack-monitoring
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/shahryar908/trello-clone-.git
+    targetRevision: main
+    path: infraops/monitoring/rules
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
