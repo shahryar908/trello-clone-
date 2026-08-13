@@ -1,7 +1,7 @@
-from fastapi import FastAPI, WebSocket
-from fastapi.websockets import WebSocketDisconnect
 import random
 
+from fastapi import FastAPI, WebSocket
+from fastapi.websockets import WebSocketDisconnect
 
 app = FastAPI()
 

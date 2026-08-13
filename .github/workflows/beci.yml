@@ -36,17 +36,18 @@ jobs:
         with:
           python-version: "3.11"
 
+      # --locked fails the build if uv.lock is out of date with pyproject.toml,
+      # so CI can never quietly install different versions than you did
       - name: Install dependencies
         run: uv sync --locked
 
-      # Add lint/test steps here once ruff/pytest are set up
-      # - name: Lint
-      #   run: uv run ruff check .
-      # - name: Test
-      #   run: uv run pytest
+      - name: Lint
+        run: uv run ruff check .
 
-      - name: Smoke check (app imports)
-        run: uv run python -c "import app.main"
+      # This is the gate. Everything below — the image, the manifest bump, the
+      # ArgoCD sync — only happens because this step exited 0.
+      - name: Test
+        run: uv run pytest -q
 
   publish:
     name: Publish image

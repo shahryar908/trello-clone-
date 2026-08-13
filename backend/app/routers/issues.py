@@ -60,7 +60,7 @@ def get_issue(
     ).all()
     return IssueDetail(
         **issue.model_dump(),
-        labels=[LabelRead(id=l.id, name=l.name, color=l.color) for l in labels],
+        labels=[LabelRead(id=lb.id, name=lb.name, color=lb.color) for lb in labels],
     )
 
 

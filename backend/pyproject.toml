@@ -13,5 +13,32 @@ dependencies = [
     "python-dotenv",
 ]
 
+[dependency-groups]
+# installed by `uv sync` locally and in CI, skipped by the Dockerfile's
+# `uv sync --no-dev` so none of this ships in the production image
+dev = [
+    "pytest",
+    "pytest-timeout",
+    "httpx",  # what fastapi.testclient.TestClient runs on
+    "ruff",
+]
+
 [tool.uv]
 package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# the project is not pip-installed (see [tool.uv] package = false), so put the
+# backend/ directory on sys.path to make `import app` work
+pythonpath = ["."]
+# a websocket test that waits for a message that never arrives would otherwise
+# hang the CI job until GitHub's 6-hour limit. Fail in 30 seconds instead.
+timeout = 30
+timeout_method = "thread"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# E/F are pycodestyle + pyflakes (the defaults), I is import sorting
+select = ["E", "F", "I"]

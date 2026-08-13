@@ -7,7 +7,9 @@ RUN pip install --no-cache-dir uv
 # Dependencies first, code second. Docker caches each layer and reuses it until
 # the files it copied change — so editing app code no longer re-runs uv sync.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen
+# --no-dev leaves pytest and ruff out of the image: they are needed to decide
+# whether to ship it, never to run it
+RUN uv sync --frozen --no-dev
 
 COPY app ./app
 

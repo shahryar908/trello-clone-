@@ -3,7 +3,6 @@ from typing import List, Optional
 
 from sqlmodel import SQLModel
 
-
 # --- auth ---
 
 class SignupRequest(SQLModel):
